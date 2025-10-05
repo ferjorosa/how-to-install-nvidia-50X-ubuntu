@@ -112,3 +112,47 @@ sudo update-initramfs -u
 ```bash
 sudo reboot
 ```
+## CUDA Version Mismatch Fix (When nvcc Fails)
+
+To find the appropriate nvcc version you go to:
+
+https://developer.nvidia.com/cuda-12-8-1-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=24.04&target_type=runfile_local
+
+### Problem: nvcc version > nvidia-smi CUDA version
+
+If `nvcc --version` shows a higher CUDA version than `nvidia-smi` (e.g., nvcc shows 13.0 but nvidia-smi shows 12.8), this creates compatibility issues with PyTorch and other CUDA applications.
+
+**Common symptoms:**
+- PyTorch shows `CUDA available: False` despite working GPU
+- CUDA initialization errors in applications
+- Version mismatch between toolkit and driver
+
+### Quick Fix (No Driver Reinstall Needed):
+```bash
+# 1. Remove mismatched CUDA toolkit packages
+sudo apt purge cuda-*-13-0 cuda-toolkit-13-*
+sudo apt autoremove
+sudo rm -rf /usr/local/cuda-13.0 /usr/local/cuda-13
+
+# 2. Download correct CUDA toolkit version (match nvidia-smi version)
+
+# For CUDA 12.8:
+wget https://developer.download.nvidia.com/compute/cuda/12.8.1/local_installers/cuda_12.8.1_570.124.06_linux.run
+
+# 3. Install ONLY the toolkit (preserve your working driver!)
+sudo sh cuda_12.8.1_570.124.06_linux.run --toolkit --silent --override
+
+# 4. Verify versions now match
+nvcc --version  # Should show 12.8
+nvidia-smi      # Should show CUDA 12.8
+
+# 5. Reboot to initialize CUDA context properly
+sudo reboot
+```
+
+**⚠️ Critical:** Always use `--toolkit` flag to avoid touching your working RTX 5090 driver!
+
+**✅ Success indicators:**
+- `nvcc --version` matches `nvidia-smi` CUDA version
+- PyTorch shows `CUDA available: True`
+- GPU is detected: `torch.cuda.get_device_name(0)`
