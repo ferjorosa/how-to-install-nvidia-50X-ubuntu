@@ -156,3 +156,154 @@ sudo reboot
 - `nvcc --version` matches `nvidia-smi` CUDA version
 - PyTorch shows `CUDA available: True`
 - GPU is detected: `torch.cuda.get_device_name(0)`
+
+---
+
+## Update Driver + Toolkit with a New `.run` File
+
+If you already installed NVIDIA/CUDA using a `.run` file and now want to move to a newer version, you do **not** need to remove the old toolkit first.
+
+These steps are written for **Ubuntu / Ubuntu-based distributions** using `systemd`, `apt`, and a desktop display manager such as `gdm3`.
+
+What happens during the upgrade:
+
+- The **driver** gets replaced by the newer one.
+- The **new toolkit** gets installed in a new folder such as `/usr/local/cuda-13.3`.
+- The **old toolkit** usually remains on disk, for example `/usr/local/cuda-12.8`.
+
+This is usually the safest way to upgrade because you can confirm the new version works before removing the older toolkit.
+
+### 1️⃣ Download the new CUDA `.run` installer
+
+Example:
+
+```bash
+~/Downloads/cuda_13.3.0_610.43.02_linux.run
+```
+
+### 2️⃣ Switch to a text console
+
+```bash
+Ctrl+Alt+F3
+```
+
+### 3️⃣ Stop the display manager
+
+For GNOME:
+
+```bash
+sudo systemctl stop gdm3
+```
+
+If your Ubuntu install uses a different display manager, replace `gdm3` with the correct one, for example `lightdm` or `sddm`.
+
+### 4️⃣ Run the installer
+
+```bash
+cd ~/Downloads
+sudo sh ./cuda_13.3.0_610.43.02_linux.run
+```
+
+In the installer:
+
+- Select `Driver`
+- Select `Toolkit`
+- Keep the default install path unless you have a reason to change it
+
+### 5️⃣ Reboot
+
+```bash
+sudo reboot
+```
+
+### 6️⃣ Verify the new install
+
+```bash
+nvidia-smi
+nvcc --version
+ls -l /usr/local | grep cuda
+```
+
+Expected result:
+
+- `nvidia-smi` shows the new driver version
+- `nvcc --version` shows the new toolkit version
+- both the old and new toolkit folders may exist side by side
+
+### 7️⃣ If needed, point `/usr/local/cuda` to the new toolkit
+
+Sometimes the installer updates the symlink automatically, but it is worth checking:
+
+```bash
+ls -l /usr/local/cuda
+```
+
+If needed:
+
+```bash
+sudo ln -sfn /usr/local/cuda-13.3 /usr/local/cuda
+```
+
+## Uninstall the Old Toolkit After the Upgrade
+
+Only do this **after** confirming that:
+
+- the new driver works
+- `nvcc --version` points to the new version
+- PyTorch and/or vLLM work correctly
+
+### 1️⃣ Check which CUDA folders are installed
+
+```bash
+ls -l /usr/local | grep cuda
+```
+
+Example:
+
+- `/usr/local/cuda-12.8`
+- `/usr/local/cuda-13.3`
+
+### 2️⃣ Look for the old toolkit uninstaller
+
+Run:
+
+```bash
+ls /usr/local/cuda-12.8/bin | grep uninstall
+```
+
+If present, use it:
+
+```bash
+sudo /usr/local/cuda-12.8/bin/uninstall_cuda_12.8.pl
+```
+
+The exact filename may vary slightly by version.
+
+### 3️⃣ If there is no uninstaller, remove the old toolkit folder manually
+
+Only remove the **old toolkit directory**, not the currently active one:
+
+```bash
+sudo rm -rf /usr/local/cuda-12.8
+```
+
+### 4️⃣ Recheck the active symlink
+
+```bash
+ls -l /usr/local/cuda
+```
+
+If it still points to the correct new version, you are done. Otherwise:
+
+```bash
+sudo ln -sfn /usr/local/cuda-13.3 /usr/local/cuda
+```
+
+### 5️⃣ Final verification
+
+```bash
+nvcc --version
+nvidia-smi
+```
+
+The driver should stay on the new version, and `nvcc` should point to the new toolkit.
