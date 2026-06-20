@@ -181,25 +181,59 @@ Example:
 ~/Downloads/cuda_13.3.0_610.43.02_linux.run
 ```
 
-### 2️⃣ Switch to a text console
+### 2️⃣ Boot Ubuntu without the GUI
 
-```bash
-Ctrl+Alt+F3
+The most reliable method is to boot directly into **text mode from GRUB**, not just switch to `Ctrl+Alt+F3` after the desktop already started.
+
+1. Reboot
+2. In GRUB, highlight your Ubuntu entry and press `e`
+3. Find the line that starts with `linux`
+4. Add this at the end of that line:
+
+```text
+systemd.unit=multi-user.target
 ```
 
-### 3️⃣ Stop the display manager
+5. Boot with `Ctrl+X` or `F10`
 
-For GNOME:
+This starts Ubuntu without the graphical interface, which makes it much easier to replace the NVIDIA driver.
+
+### 3️⃣ Check that the GUI stack is really stopped
+
+After logging in to the text console, run:
 
 ```bash
-sudo systemctl stop gdm3
+systemctl is-active gdm3
+systemctl is-active nvidia-persistenced
+ps -eo pid,comm,args | grep -E 'Xorg|gdm|gnome-shell|wayland|nvidia-persistenced'
+lsmod | grep nvidia
 ```
 
-If your Ubuntu install uses a different display manager, replace `gdm3` with the correct one, for example `lightdm` or `sddm`.
+What you want:
 
-> If the installer fails and tells you to check logs under `/var/log`, one common cause is that the display manager or another GPU-related process is still running, so the NVIDIA kernel modules are still loaded. You can verify the display manager is stopped with `systemctl is-active gdm3`, which should return `inactive`.
+- `gdm3` should be `inactive`
+- `nvidia-persistenced` should be `inactive`
+- no `Xorg` / `gnome-shell` processes should remain
+- ideally `lsmod | grep nvidia` shows nothing, or at least the modules can be unloaded
 
-### 4️⃣ Run the installer
+> A very common failure mode is: `gdm3` is inactive, but NVIDIA modules such as `nvidia_uvm` are still loaded. In that case the installer aborts and tells you to look in `/var/log/nvidia-installer.log`.
+
+### 4️⃣ Unload NVIDIA modules if they are still present
+
+```bash
+sudo systemctl stop nvidia-persistenced
+sudo modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia
+```
+
+Then confirm again:
+
+```bash
+lsmod | grep nvidia
+```
+
+If this still shows loaded modules, do **not** continue with the installer yet.
+
+### 5️⃣ Run the installer
 
 ```bash
 cd ~/Downloads
@@ -212,13 +246,15 @@ In the installer:
 - Select `Toolkit`
 - Keep the default install path unless you have a reason to change it
 
-### 5️⃣ Reboot
+The `MIT/GPL` kernel module choice is **not** the problem when running in text mode. The installer can answer that automatically. The usual blocker is that an old NVIDIA kernel module is still loaded.
+
+### 6️⃣ Reboot
 
 ```bash
 sudo reboot
 ```
 
-### 6️⃣ Verify the new install
+### 7️⃣ Verify the new install
 
 ```bash
 nvidia-smi
@@ -232,7 +268,7 @@ Expected result:
 - `nvcc --version` shows the new toolkit version
 - both the old and new toolkit folders may exist side by side
 
-### 7️⃣ If needed, point `/usr/local/cuda` to the new toolkit
+### 8️⃣ If needed, point `/usr/local/cuda` to the new toolkit
 
 Sometimes the installer updates the symlink automatically, but it is worth checking:
 
