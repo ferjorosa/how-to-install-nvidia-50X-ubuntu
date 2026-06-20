@@ -163,15 +163,7 @@ sudo reboot
 
 If you already installed NVIDIA/CUDA using a `.run` file and now want to move to a newer version, you do **not** need to remove the old toolkit first.
 
-These steps are written for **Ubuntu / Ubuntu-based distributions** using `systemd`, `apt`, and a desktop display manager such as `gdm3`.
-
-What happens during the upgrade:
-
-- The **driver** gets replaced by the newer one.
-- The **new toolkit** gets installed in a new folder such as `/usr/local/cuda-13.3`.
-- The **old toolkit** usually remains on disk, for example `/usr/local/cuda-12.8`.
-
-This is usually the safest way to upgrade because you can confirm the new version works before removing the older toolkit.
+These steps are written for **Ubuntu / Ubuntu-based distributions**.
 
 ### 1️⃣ Download the new CUDA `.run` installer
 
@@ -183,7 +175,7 @@ Example:
 
 ### 2️⃣ Boot Ubuntu without the GUI
 
-The most reliable method is to boot directly into **text mode from GRUB**, not just switch to `Ctrl+Alt+F3` after the desktop already started.
+In my case, just switching to a text console was **not enough**. What worked was booting directly from **GRUB** without the GUI.
 
 1. Reboot
 2. In GRUB, highlight your Ubuntu entry and press `e`
@@ -196,152 +188,80 @@ systemd.unit=multi-user.target
 
 5. Boot with `Ctrl+X` or `F10`
 
-This starts Ubuntu without the graphical interface, which makes it much easier to replace the NVIDIA driver.
+This starts Ubuntu without the graphical interface. In my case, using `text` did **not** work, but `systemd.unit=multi-user.target` did.
 
-### 3️⃣ Check that the GUI stack is really stopped
-
-After logging in to the text console, run:
-
-```bash
-systemctl is-active gdm3
-systemctl is-active nvidia-persistenced
-ps -eo pid,comm,args | grep -E 'Xorg|gdm|gnome-shell|wayland|nvidia-persistenced'
-lsmod | grep nvidia
-```
-
-What you want:
-
-- `gdm3` should be `inactive`
-- `nvidia-persistenced` should be `inactive`
-- no `Xorg` / `gnome-shell` processes should remain
-- ideally `lsmod | grep nvidia` shows nothing, or at least the modules can be unloaded
-
-> A very common failure mode is: `gdm3` is inactive, but NVIDIA modules such as `nvidia_uvm` are still loaded. In that case the installer aborts and tells you to look in `/var/log/nvidia-installer.log`.
-
-### 4️⃣ Unload NVIDIA modules if they are still present
-
-```bash
-sudo systemctl stop nvidia-persistenced
-sudo modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia
-```
-
-Then confirm again:
-
-```bash
-lsmod | grep nvidia
-```
-
-If this still shows loaded modules, do **not** continue with the installer yet.
-
-### 5️⃣ Run the installer
+### 3️⃣ Run the full installer from that non-GUI boot
 
 ```bash
 cd ~/Downloads
 sudo sh ./cuda_13.3.0_610.43.02_linux.run
 ```
 
-In the installer:
-
-- Select `Driver`
-- Select `Toolkit`
-- Keep the default install path unless you have a reason to change it
-
-The `MIT/GPL` kernel module choice is **not** the problem when running in text mode. The installer can answer that automatically. The usual blocker is that an old NVIDIA kernel module is still loaded.
-
-### 6️⃣ Reboot
+### 4️⃣ Reboot and check whether the driver updated
 
 ```bash
 sudo reboot
+nvidia-smi
 ```
 
-### 7️⃣ Verify the new install
+If `nvidia-smi` shows the new version, then the driver update worked.
+
+### 5️⃣ If `nvcc` is still old, install only the toolkit
+
+In my case, the full installation had an issue, but the driver ended up installed correctly. The remaining fix was to install only the toolkit afterward, and this did **not** require starting without the GUI again.
+
+```bash
+cd ~/Downloads
+sudo sh ./cuda_13.3.0_610.43.02_linux.run --toolkit
+```
+
+### 6️⃣ Verify the toolkit and switch `nvcc` to it
+
+```bash
+nvcc --version
+ls -l /usr/local | grep cuda
+ls -l /usr/local/cuda
+```
+
+If the new toolkit exists but `/usr/local/cuda` still points to the old one, update the symlink:
+
+```bash
+sudo ln -sfn /usr/local/cuda-13.3 /usr/local/cuda
+```
+
+### 7️⃣ Final verification
 
 ```bash
 nvidia-smi
 nvcc --version
-ls -l /usr/local | grep cuda
 ```
 
 Expected result:
 
 - `nvidia-smi` shows the new driver version
 - `nvcc --version` shows the new toolkit version
-- both the old and new toolkit folders may exist side by side
+- both toolkit folders may exist side by side until you remove the old one
 
-### 8️⃣ If needed, point `/usr/local/cuda` to the new toolkit
-
-Sometimes the installer updates the symlink automatically, but it is worth checking:
-
-```bash
-ls -l /usr/local/cuda
-```
-
-If needed:
-
-```bash
-sudo ln -sfn /usr/local/cuda-13.3 /usr/local/cuda
-```
-
-## Uninstall the Old Toolkit After the Upgrade
+## Optional: Remove the Old Toolkit
 
 Only do this **after** confirming that:
 
-- the new driver works
-- `nvcc --version` points to the new version
+- `nvidia-smi` works
+- `nvcc --version` shows the new version
+- `/usr/local/cuda` points to the new toolkit
 - PyTorch and/or vLLM work correctly
 
-### 1️⃣ Check which CUDA folders are installed
+Check the current CUDA folders:
 
 ```bash
 ls -l /usr/local | grep cuda
+ls -l /usr/local/cuda
 ```
 
-Example:
-
-- `/usr/local/cuda-12.8`
-- `/usr/local/cuda-13.3`
-
-### 2️⃣ Look for the old toolkit uninstaller
-
-Run:
-
-```bash
-ls /usr/local/cuda-12.8/bin | grep uninstall
-```
-
-If present, use it:
-
-```bash
-sudo /usr/local/cuda-12.8/bin/uninstall_cuda_12.8.pl
-```
-
-The exact filename may vary slightly by version.
-
-### 3️⃣ If there is no uninstaller, remove the old toolkit folder manually
-
-Only remove the **old toolkit directory**, not the currently active one:
+If the old toolkit is still there and is no longer in use, you can remove it directly:
 
 ```bash
 sudo rm -rf /usr/local/cuda-12.8
 ```
 
-### 4️⃣ Recheck the active symlink
-
-```bash
-ls -l /usr/local/cuda
-```
-
-If it still points to the correct new version, you are done. Otherwise:
-
-```bash
-sudo ln -sfn /usr/local/cuda-13.3 /usr/local/cuda
-```
-
-### 5️⃣ Final verification
-
-```bash
-nvcc --version
-nvidia-smi
-```
-
-The driver should stay on the new version, and `nvcc` should point to the new toolkit.
+Only remove the old versioned folder, **not** `/usr/local/cuda`.
