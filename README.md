@@ -197,6 +197,8 @@ sudo systemctl stop gdm3
 
 If your Ubuntu install uses a different display manager, replace `gdm3` with the correct one, for example `lightdm` or `sddm`.
 
+> If the installer fails and tells you to check logs under `/var/log`, one common cause is that the display manager or another GPU-related process is still running, so the NVIDIA kernel modules are still loaded. You can verify the display manager is stopped with `systemctl is-active gdm3`, which should return `inactive`.
+
 ### 4️⃣ Run the installer
 
 ```bash
